@@ -1,0 +1,16 @@
+這是第一個driver範例, 不過為了要符合linux kernel 4.18的架構, 也花了我不少時間調整.
+
+我們主要是想要建立一個block device driver, 且可以在這個block device上面建立file system,
+可以mount/umount, 可以read/write file.
+基本上都是依照範例, 但因為在架構上的不同, 原本範例的讀寫是在request structure的buffer上面,
+但4.18版的kernel, 它的request structure並沒有buffer這個member,
+取而代之的是bio與bio_vec.
+
+request裡面有多個bio, 而一個bio裡面會有多個bio_vec, 而bio_vec會有read/write所需要的buffer空間.
+所以我們要先從request queue拿出每一個request, 再從request裡面拿出所有bio, 再拿出bio裡面的所有bio_vec, 再從每個bio_vec拿出buffer, 
+最後針對這個buffer進行read/write操作(因為我們是alloc一個array, 所以在我們的例子裡是使用memcpy來處理).
+(光要找出這個規則, 我就找了不少地方, 主要是參考loop.c 與sbull driver這個example.)
+
+
+
+ 
