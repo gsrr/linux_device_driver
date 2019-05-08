@@ -1,0 +1,55 @@
+這裡主要的目的是要將io scheduler的type從預設的cfq改為noop,
+雖然只是一個動作而已, 但花了我快5個小時的時間.
+主要是因為kernel的架構已經有所更動, 原本作者所用的elevator_init已經不能使用了.
+在新架構裡面所有的動作都是要透過block device api來進行處理.
+
+一開始我還在找看看elevator.c 中有沒有替代的function可以使用, 
+但裡面的function幾乎都沒有export出來. 
+因為新版的架構中, elevator.o是跟blk-core.o連結在一起, 所以要透過block device api來呼叫.
+但block device api又找不到適合的function來處理這件事情.
+
+不過userspace 可以透過sysfs來變動io scheduler的演算法:
+# cat /sys/block/simp_blkdev/queue/scheduler
+noop deadline [cfq]
+
+# echo "noop" > /sys/block/simp_blkdev/queue/scheduler
+# cat /sys/block/simp_blkdev/queue/scheduler
+[noop] deadline cfq
+
+所以kernel一定有地方可以處理這件事情. 當然, 入口點就是sysfs.
+在block/blk-sysfs.c裡面有定義sysfs在block device所要顯示的內容:
+
+static struct queue_sysfs_entry queue_iosched_entry = {
+	.attr = {.name = "scheduler", .mode = 0644 },
+	.show = elv_iosched_show,
+	.store = elv_iosched_store,
+};
+
+我們可以看到elv_iosched_store就是在處理這件事情.
+
+那我們現在可以做的就是在我們的driver init 中直接去呼叫這個function.
+但很可惜的, 這個function並沒有被export出來.
+為了在現有的kernel架構下解決這個問題, 我就在block/blk-core.c中加了一個api:
+
+int blk_change_elevator(struct request_queue *q, char *name)
+{
+    return elv_iosched_store(q, name, 5);
+}
+
+EXPORT_SYMBOL(blk_change_elevator);
+
+當然, 在include/linux/blkdev.h也要加入:
+
+extern int blk_change_elevator(struct request_queue *, char *);
+
+並在driver init function中來呼叫它.
+但很可惜的, module 是build成功了, 但是io schedule並沒有跟著更改, 而且change elevator還收到error value:-2.
+看了一下, -2指的error是 ENOENT, 是在進行下面的檢查所引發的:
+
+	/* Make sure queue is not in the middle of being removed */
+	if (!test_bit(QUEUE_FLAG_REGISTERED, &q->queue_flags))
+		return -ENOENT;
+
+判斷也許是在queue的狀態還處在沒有被使用時才會導致這個問題.
+最後將呼叫blk_change_elevator移到add_disk後面就可以了.
+
