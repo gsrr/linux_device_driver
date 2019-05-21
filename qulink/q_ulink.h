@@ -163,44 +163,70 @@ struct qulink_tmp* qulink_read_template(char *fpath)
     return tmp;
 }
 
-struct qulink_tmp* qulink_init_tmp(int tnum, int rev)
+struct qulink_tmp* qulink_init_tmp(int tnum)
 {
+    printf("init template : number is %d\n", tnum);
     struct qulink_tmp *tmp = (struct qulink_tmp*)malloc(sizeof(struct qulink_tmp));
     if(tmp == NULL)
     {
         return NULL;
     }
-    tmp->num = tnum;
-    tmp->rev = rev;
-    tmp->cnt = 0;
-    tmp->len = TEMPLATE_SIZE;
+    
+    switch (tnum)
+    {
+        case 16:
+            tmp->num = 16;
+            tmp->rev = 100;
+            tmp->cnt = 15;
+            tmp->len = TEMPLATE_SIZE;
+            break;
+        case 201:
+            tmp->num = 201;
+            tmp->rev = 100;
+            tmp->cnt = 9;
+            tmp->len = TEMPLATE_SIZE;
+            break;
+        case 202:
+            tmp->num = 202;
+            tmp->rev = 100;
+            tmp->cnt = 5;
+            tmp->len = TEMPLATE_SIZE;
+            break;
+        default:
+            printf("template number is not correct\n");
+            free(tmp);
+            tmp = NULL;
+            break;
+    }
     return tmp;
 }   
 
-struct qulink_tmp* qulink_init_tmp_with_cell(int tnum, int rev, int cnt)
+struct qulink_tmp* qulink_init_tmp_with_cell(int tnum)
 {
     int i;
-    struct qulink_tmp *tmp = (struct qulink_tmp*)malloc(sizeof(struct qulink_tmp));
+    struct qulink_tmp *tmp = qulink_init_tmp(tnum);
     if(tmp == NULL)
     {
         return NULL;
     }
-    tmp->num = tnum;
-    tmp->rev = rev;
-    tmp->cnt = cnt;
-    tmp->len = TEMPLATE_SIZE;
-    tmp->cells = (struct qulink_cell*)malloc(sizeof(struct qulink_cell) * cnt);
+
+    tmp->cells = (struct qulink_cell*)malloc(sizeof(struct qulink_cell) * (tmp->cnt));
 
     if(tmp->cells != NULL)
     {
-        for(i = 0 ; i < cnt ; i++)
+        for(i = 0 ; i < tmp->cnt ; i++)
         {
             tmp->cells[i].id = (i + 1);
             tmp->cells[i].flag = 1;
             tmp->cells[i].val = 0;
         }
+        return tmp;
     }
-    return tmp;
+    else
+    {
+        free(tmp);
+        return NULL;
+    }
 }   
 
 void qulink_display_tmp(struct qulink_tmp *tmp)
@@ -234,23 +260,41 @@ void qulink_tmp_free(struct qulink_tmp *tmp)
     }
 }
 
-int qulink_add_cnt(char *sn, int tnum, int id)
+int qulink_cell_add_cnt(char *sn, int tnum, int id)
 {
     struct qulink_tmp *tmp;
-   char fpath[512] = {0};
-   sprintf(fapth, "disk_data_%s_%d", sn, tmp);
-   if( access( fname, F_OK ) != -1 ) 
-   {
-       // file exists
-   } 
-   else 
-   {
-       tmp = qulink_init_tmp_with_cell(tnum, )
-   }
+    char fpath[512] = {0};
+    sprintf(fpath, "/root/disk_data_%s_%d", sn, tnum);
+    if( access( fpath, F_OK ) != -1 ) 
+    {
+        tmp = qulink_read_template(fpath);
+    } 
+    else 
+    {
+        printf("file is not exist\n");
+        tmp = qulink_init_tmp_with_cell(tnum);
+    }
+    tmp->cells[id - 1].val += 1; // index = id - 1
+    qulink_dump_template(tmp, fpath);
+    qulink_tmp_free(tmp);
 }
 
-int qulink_get_disk_data(char *sn, int tmp)
+int qulink_check_disk_data(char *sn, int tnum)
 {
-    
+    struct qulink_tmp *tmp;
+    char fpath[512] = {0};
+    sprintf(fpath, "/root/disk_data_%s_%d", sn, tnum);
+    if( access( fpath, F_OK ) == -1 ) 
+    {
+        printf("file is not exist\n");
+        tmp = qulink_init_tmp_with_cell(tnum);
+        if(tmp == NULL)
+        {
+            return -1;
+        }
+        qulink_dump_template(tmp, fpath);
+        qulink_tmp_free(tmp);
+    } 
+    return 0;
 }
 
